@@ -1,16 +1,17 @@
 package com.example.nsense
 
-import android.content.Intent
 import android.os.Bundle
+import android.util.Patterns
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.example.nsense.data.local.NoiseDatabase
 import com.example.nsense.data.local.User
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class RegisterActivity : AppCompatActivity() {
 
@@ -21,72 +22,78 @@ class RegisterActivity : AppCompatActivity() {
 
         val database = NoiseDatabase.getDatabase(this)
 
-        val etName =
-            findViewById<EditText>(R.id.etName)
-
-        val etEmail =
-            findViewById<EditText>(R.id.etEmail)
-
-        val etPassword =
-            findViewById<EditText>(R.id.etPassword)
-
-        val etConfirmPassword =
-            findViewById<EditText>(R.id.etConfirmPassword)
-
-        val btnRegister =
-            findViewById<Button>(R.id.btnRegister)
-
-        val btnGoToLogin =
-            findViewById<Button>(R.id.btnGoToLogin)
+        val etName = findViewById<EditText>(R.id.etName)
+        val etEmail = findViewById<EditText>(R.id.etEmail)
+        val etPassword = findViewById<EditText>(R.id.etPassword)
+        val etConfirmPassword = findViewById<EditText>(R.id.etConfirmPassword)
+        val btnRegister = findViewById<Button>(R.id.btnRegister)
+        val btnGoToLogin = findViewById<Button>(R.id.btnGoToLogin)
 
         btnRegister.setOnClickListener {
 
             val name = etName.text.toString().trim()
-            val email = etEmail.text.toString().trim()
+            val email = etEmail.text.toString().trim().lowercase()
             val password = etPassword.text.toString()
             val confirmPassword = etConfirmPassword.text.toString()
 
-            if (name.isEmpty() ||
-                email.isEmpty() ||
-                password.isEmpty() ||
-                confirmPassword.isEmpty()
-            ) {
+            if (name.isEmpty() || email.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
+                Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
 
+            if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                Toast.makeText(this, "Please enter a valid email", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            if (password.length < 6) {
                 Toast.makeText(
                     this,
-                    "Please fill all fields",
+                    "Password must be at least 6 characters",
                     Toast.LENGTH_SHORT
                 ).show()
-
                 return@setOnClickListener
             }
 
             if (password != confirmPassword) {
-
-                Toast.makeText(
-                    this,
-                    "Passwords do not match",
-                    Toast.LENGTH_SHORT
-                ).show()
-
+                Toast.makeText(this, "Passwords do not match", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            val user = User(
-                name = name,
-                email = email,
-                password = password
-            )
+            btnRegister.isEnabled = false
 
-            CoroutineScope(Dispatchers.IO).launch {
+            lifecycleScope.launch {
 
-                database.userDao().insertUser(user)
+                val created = withContext(Dispatchers.IO) {
+                    val dao = database.userDao()
+                    if (dao.getUserByEmail(email) != null) {
+                        false
+                    } else {
+                        val salt = PasswordUtils.newSalt()
+                        dao.insertUser(
+                            User(
+                                name = name,
+                                email = email,
+                                passwordHash = PasswordUtils.hash(password, salt),
+                                salt = salt
+                            )
+                        )
+                        true
+                    }
+                }
 
-                runOnUiThread {
-
+                if (created) {
                     Toast.makeText(
                         this@RegisterActivity,
-                        "Registration successful",
+                        "Registration successful. Please log in.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    finish() // back to the login screen
+                } else {
+                    btnRegister.isEnabled = true
+                    Toast.makeText(
+                        this@RegisterActivity,
+                        "An account with this email already exists",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -94,11 +101,7 @@ class RegisterActivity : AppCompatActivity() {
         }
 
         btnGoToLogin.setOnClickListener {
-
-            val intent =
-                Intent(this, LoginActivity::class.java)
-
-            startActivity(intent)
+            finish()
         }
     }
 }

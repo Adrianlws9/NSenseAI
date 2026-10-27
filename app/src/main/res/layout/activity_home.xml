@@ -73,6 +73,13 @@
             android:text="Noise Map" />
 
         <Button
+            android:id="@+id/btnLogout"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:layout_marginTop="15dp"
+            android:text="Log Out" />
+
+        <Button
             android:id="@+id/btnAbout"
             android:layout_width="match_parent"
             android:layout_height="60dp"

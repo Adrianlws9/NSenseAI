@@ -13,5 +13,7 @@ data class User(
 
     val email: String,
 
-    val password: String
+    val passwordHash: String,
+
+    val salt: String
 )

@@ -35,37 +35,52 @@ class ResultActivity : AppCompatActivity() {
         val latitude = intent.getDoubleExtra("latitude", 0.0)
         val longitude = intent.getDoubleExtra("longitude", 0.0)
         val noiseType = intent.getStringExtra("noiseType") ?: "Other"
+        val sources = intent.getStringExtra("sources") ?: "No clear source"
+
+        // The ML result changes the verdict: the sound source adds to the rating
+        val penalty = NoiseSources.penalty(noiseType)
+        val rating = noiseLevel + penalty
 
         val category = when {
-            noiseLevel < 50 -> "Low"
-            noiseLevel < 70 -> "Moderate"
+            rating < 50 -> "Low"
+            rating < 70 -> "Moderate"
             else -> "High"
+        }
+
+        val ratingText = if (penalty > 0) {
+            "Impact rating: ${rating.toInt()} (+$penalty for $noiseType)"
+        } else {
+            "Impact rating: ${rating.toInt()}"
         }
 
         tvDecibel.text = String.format("%.1f dB", noiseLevel)
         tvNoiseCategory.text = category.uppercase()
-        tvNoiseType.text = "Detected sound: $noiseType"
+        tvNoiseType.text = "Detected sound: $noiseType\nSources: $sources\n$ratingText"
 
-        // AI recommendation (falls back to built-in advice if offline or the call fails)
+        // Remember this reading so the Home screen can show it
+        LastReading.save(this, noiseLevel, category, noiseType)
+
+        // AI recommendation (built-in advice if offline or the call fails)
         if (NetworkUtils.isInternetAvailable(this)) {
             tvRecommendation.text = "AI recommendation:\nGenerating advice..."
             lifecycleScope.launch {
                 val advice = RecommendationService.getRecommendation(
-                    noiseLevel, noiseType, category
+                    noiseLevel, rating, noiseType, category, sources
                 )
                 tvRecommendation.text = if (advice != null) {
                     "AI recommendation:\n$advice"
                 } else {
-                    "Recommendation:\n" + RecommendationService.fallback(category)
+                    "Recommendation:\n" +
+                            RecommendationService.fallback(category, noiseType)
                 }
             }
         } else {
             tvRecommendation.text =
-                "Recommendation:\n" + RecommendationService.fallback(category)
+                "Recommendation:\n" + RecommendationService.fallback(category, noiseType)
         }
 
         // AI alert: only for loud or dangerous sounds
-        if (RecommendationService.shouldAlert(noiseLevel, noiseType)) {
+        if (RecommendationService.shouldAlert(rating, noiseType)) {
             val alertTitle = RecommendationService.alertTitle(noiseLevel, noiseType)
 
             if (NetworkUtils.isInternetAvailable(this)) {
@@ -83,23 +98,32 @@ class ResultActivity : AppCompatActivity() {
 
         btnSaveResult.setOnClickListener {
 
+            // Stops accidental double saves
+            btnSaveResult.isEnabled = false
+
             val measurement = NoiseMeasurement(
                 noiseLevel = noiseLevel,
                 noiseType = noiseType,
                 category = category,
                 timestamp = System.currentTimeMillis(),
                 latitude = latitude,
-                longitude = longitude
+                longitude = longitude,
+                userId = SessionManager.userId(this)
             )
 
             CoroutineScope(Dispatchers.IO).launch {
 
-                database.noiseDao().insert(measurement)
+                val rowId = database.noiseDao().insert(measurement).toInt()
+                val saved = measurement.copy(id = rowId)
 
                 if (NetworkUtils.isInternetAvailable(this@ResultActivity)) {
-                    FirebaseSync.uploadMeasurement(measurement)
+                    FirebaseSync.uploadMeasurement(saved) {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            database.noiseDao().markSynced(rowId)
+                        }
+                    }
                 } else {
-                    android.util.Log.d("Sync", "No internet — saved locally only")
+                    android.util.Log.d("Sync", "No internet: saved locally, will upload later")
                 }
 
                 runOnUiThread {

@@ -19,5 +19,11 @@ data class NoiseMeasurement(
 
     val latitude: Double = 0.0,
 
-    val longitude: Double = 0.0
+    val longitude: Double = 0.0,
+
+    // Which user this reading belongs to
+    val userId: Int = 0,
+
+    // Has this reading been uploaded to the cloud yet?
+    val synced: Boolean = false
 )

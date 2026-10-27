@@ -14,18 +14,59 @@
         android:textStyle="bold" />
 
     <TextView
-        android:id="@+id/tvHistory"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="30dp"
-        android:text="No measurements saved yet."
-        android:textSize="18sp" />
+        android:layout_marginTop="16dp"
+        android:text="FILTER BY SOUND SOURCE"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <Spinner
+        android:id="@+id/spnSource"
+        android:layout_width="match_parent"
+        android:layout_height="48dp" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:layout_weight="1">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvInsights"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Loading insights..."
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/tvHistory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="No measurements saved yet."
+                android:textSize="18sp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <Button
+        android:id="@+id/btnShowMap"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="12dp"
+        android:text="Show on Map" />
 
     <Button
         android:id="@+id/btnBackHome"
         android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:layout_marginTop="30dp"
+        android:layout_height="56dp"
+        android:layout_marginTop="8dp"
         android:text="Back to Home" />
 
 </LinearLayout>

@@ -19,18 +19,21 @@ import kotlin.math.log10
 class MeasureActivity : AppCompatActivity() {
 
     companion object {
-        // Turns the microphone's digital level into an approximate real-world dB level.
         private const val CALIBRATION_OFFSET_DB = 105.0
-
-        // The audio buffer starts empty, so ignore the first second.
         private const val WARM_UP_MS = 1000L
-
-        // How often the sound type is classified
         private const val CLASSIFY_EVERY_MS = 400L
 
-        // A sound must be detected consistently: its average confidence across all
-        // classification rounds must reach this value, otherwise the result is "Other".
+        // Main source: its average confidence must reach this, otherwise "Other"
         private const val MIN_AVG_CONFIDENCE = 0.2f
+
+        // Warning sound (siren/alarm): needs this confidence in at least this many readings
+        private const val EVENT_MIN_SCORE = 0.35f
+        private const val EVENT_MIN_HITS = 2
+
+        // "Also heard" sounds: clear in at least this many readings
+        private const val ALSO_MIN_SCORE = 0.25f
+
+        private const val ALSO_MIN_HITS = 2
     }
 
     private var audioRecord: AudioRecord? = null
@@ -41,6 +44,9 @@ class MeasureActivity : AppCompatActivity() {
     private var windowCount = 0
     private var classificationRounds = 0
     private val categoryScores = mutableMapOf<String, Float>()
+    private val categoryHits = mutableMapOf<String, Int>()
+
+    private val alsoHits = mutableMapOf<String, Int>()
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -80,9 +86,11 @@ class MeasureActivity : AppCompatActivity() {
         windowCount = 0
         classificationRounds = 0
         categoryScores.clear()
+        categoryHits.clear()
+        alsoHits.clear()
 
         findViewById<Button>(R.id.btnStartMeasurement).isEnabled = false
-        findViewById<TextView>(R.id.tvMeasurementStatus).text = "Measuring..."
+        findViewById<TextView>(R.id.tvMeasurementStatus).text = "Listening..."
 
         audioRecord = NoiseClassifier.createAudioRecord()
         tensorAudio = NoiseClassifier.createInputTensorAudio()
@@ -114,13 +122,28 @@ class MeasureActivity : AppCompatActivity() {
                         }
                     }
 
-                    // Classify the sound type regularly, also after the warm-up second
+                    // Classify regularly after the warm-up second
                     if (elapsed >= WARM_UP_MS && elapsed % CLASSIFY_EVERY_MS == 0L) {
                         classificationRounds++
                         val topScores = NoiseClassifier.classifyTopScores(tensor)
                         for ((category, score) in topScores) {
                             categoryScores[category] = (categoryScores[category] ?: 0f) + score
+                            if (score >= EVENT_MIN_SCORE) {
+                                categoryHits[category] = (categoryHits[category] ?: 0) + 1
+                            }
+                            if (score >= ALSO_MIN_SCORE) {
+                                alsoHits[category] = (alsoHits[category] ?: 0) + 1
+                            }
                         }
+
+                        // Live view of what the model hears right now
+                        val top = topScores.maxByOrNull { it.second }
+                        findViewById<TextView>(R.id.tvMeasurementStatus).text =
+                            if (top != null) {
+                                "Hearing: ${top.first} (${(top.second * 100).toInt()}%)"
+                            } else {
+                                "Listening..."
+                            }
                     }
                 }
 
@@ -155,10 +178,9 @@ class MeasureActivity : AppCompatActivity() {
             0.0
         }
 
-        // Pick the sound with the highest total confidence, but only if it was
-        // detected consistently enough. Otherwise the honest answer is "Other".
+        // 1) Main source: highest total score, but only if detected consistently
         val best = categoryScores.maxByOrNull { it.value }
-        val detectedSound =
+        val dominant =
             if (best != null && classificationRounds > 0 &&
                 best.value / classificationRounds >= MIN_AVG_CONFIDENCE
             ) {
@@ -167,9 +189,37 @@ class MeasureActivity : AppCompatActivity() {
                 "Other"
             }
 
+        // 2) Warning sounds take priority, even if heard only briefly
+        val warning = NoiseSources.warningSounds
+            .filter { (categoryHits[it] ?: 0) >= EVENT_MIN_HITS }
+            .maxByOrNull { categoryScores[it] ?: 0f }
+
+        val detectedSound = warning ?: dominant
+
+        // 3) Share of each source, for the Result screen and the AI advice
+        val totalScore = categoryScores.values.sum()
+        val sourcesText = if (detectedSound == "Other" || totalScore <= 0f) {
+            "No clear source"
+        } else {
+            categoryScores.entries
+                .sortedByDescending { it.value }
+                .take(3)
+                .joinToString(", ") { "${it.key} ${(it.value / totalScore * 100).toInt()}%" }
+        }
+
+        val alsoHeard = alsoHits
+            .filter { it.value >= ALSO_MIN_HITS && it.key != detectedSound }
+            .keys
+        val alsoText = if (alsoHeard.isNotEmpty()) {
+            "\nAlso heard briefly: " + alsoHeard.joinToString(", ")
+        } else {
+            ""
+        }
+
         android.util.Log.d(
             "MeasureActivity",
-            "scores=$categoryScores rounds=$classificationRounds result=$detectedSound"
+            "scores=$categoryScores hits=$categoryHits rounds=$classificationRounds " +
+                    "dominant=$dominant warning=$warning result=$detectedSound"
         )
 
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -187,8 +237,22 @@ class MeasureActivity : AppCompatActivity() {
             intent.putExtra("latitude", lat)
             intent.putExtra("longitude", lng)
             intent.putExtra("noiseType", detectedSound)
+            intent.putExtra("sources", sourcesText + alsoText)
             startActivity(intent)
             finish()
         }
+    }
+
+    // Stop the microphone if the user leaves the screen mid-measurement
+    override fun onDestroy() {
+        super.onDestroy()
+        handler.removeCallbacksAndMessages(null)
+        try {
+            audioRecord?.stop()
+        } catch (e: Exception) {
+            // already stopped
+        }
+        audioRecord?.release()
+        audioRecord = null
     }
 }
