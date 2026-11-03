@@ -26,6 +26,10 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
         <activity
+            android:name=".MonitorActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".ResultActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />

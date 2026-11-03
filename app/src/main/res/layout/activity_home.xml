@@ -59,6 +59,13 @@
             android:text="Measure Noise" />
 
         <Button
+            android:id="@+id/btnMonitor"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:layout_marginTop="15dp"
+            android:text="Monitor Mode" />
+
+        <Button
             android:id="@+id/btnHistory"
             android:layout_width="match_parent"
             android:layout_height="60dp"

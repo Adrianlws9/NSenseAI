@@ -42,6 +42,10 @@ class HomeActivity : AppCompatActivity() {
             startActivity(Intent(this, MeasureActivity::class.java))
         }
 
+        findViewById<Button>(R.id.btnMonitor).setOnClickListener {
+            startActivity(Intent(this, MonitorActivity::class.java))
+        }
+
         findViewById<Button>(R.id.btnHistory).setOnClickListener {
             startActivity(Intent(this, HistoryActivity::class.java))
         }
