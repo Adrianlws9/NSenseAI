@@ -40,7 +40,7 @@ class HistoryActivity : AppCompatActivity() {
         lifecycleScope.launch {
 
             val data = withContext(Dispatchers.IO) {
-                d                database.noiseDao().getMeasurementsForUser(SessionManager.userId(this@HistoryActivity))
+                                database.noiseDao().getMeasurementsForUser(SessionManager.userId(this@HistoryActivity))
             }
             allMeasurements = data
 
